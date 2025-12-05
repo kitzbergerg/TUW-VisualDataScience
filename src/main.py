@@ -39,11 +39,6 @@ def plot_relationships(target_iso, ax):
     ax.clear()
     ax.set_axis_off()
 
-    # --- FIX 2: Set fixed bounds ---
-    # Re-apply the global map limits after clearing
-    ax.set_xlim(MIN_X, MAX_X)
-    ax.set_ylim(MIN_Y, MAX_Y)
-
     ax.set_title(f'Geopolitical Relations: Perspective of {target_iso}', fontsize=14)
 
     subset = df[df['f0_'] == target_iso].copy()
@@ -72,6 +67,12 @@ def plot_relationships(target_iso, ax):
     if not source_geo.empty:
         source_geo.plot(ax=ax, color='#377eb8', edgecolor='black', hatch='//')
 
+    # Set fixed bounds and aspect ratio AFTER plotting to prevent matplotlib from autoscaling
+    ax.set_xlim(MIN_X, MAX_X)
+    ax.set_ylim(MIN_Y, MAX_Y)
+    ax.set_aspect('equal', adjustable='box')
+    ax.autoscale(False)
+
 
 # --- Interaction Logic ---
 def on_click(event):
@@ -79,8 +80,7 @@ def on_click(event):
 
     point = Point(event.xdata, event.ydata)
 
-    # Optimization: Filter potential hits by bounding box first (faster than iterating all)
-    # or just use the loop as you had it (fine for small N)
+    # Find clicked country
     clicked_country = None
     for _, row in world.iterrows():
         if row['geometry'].contains(point):
@@ -90,11 +90,11 @@ def on_click(event):
     if clicked_country:
         print(f"Clicked on {clicked_country}. Updating map...")
         plot_relationships(clicked_country, ax)
-        fig.canvas.draw()
-
+        fig.canvas.draw_idle()
 
 # --- Main Execution ---
 fig, ax = plt.subplots(figsize=(14, 8))
+plt.subplots_adjust(left=0.02, right=0.88, top=0.95, bottom=0.05)
 
 norm = Normalize(vmin=-10, vmax=10)
 cbar = fig.colorbar(ScalarMappable(norm=norm, cmap='RdYlGn'), ax=ax, shrink=0.6)
