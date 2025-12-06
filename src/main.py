@@ -3,11 +3,12 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable
+from matplotlib.widgets import Slider, RadioButtons
 from shapely.geometry import Point
 
 # --- Configuration ---
-DATA_FILE = 'data/country_goldstein.csv'
-DEFAULT_ISO = 'AUT'
+DATA_FILE = 'data/relations_2010_to_2025.csv'
+DEFAULT_ISO = 'UKR'
 MIN_EVENTS = 50
 
 # --- Load Data ---
@@ -21,28 +22,29 @@ MIN_X, MIN_Y, MAX_X, MAX_Y = world.total_bounds
 # Load user interaction data
 df = pd.read_csv(DATA_FILE)
 
-# --- FIX 1: Symmetrize Data ---
-# Create a copy with swapped source/target
+# Data symmetry
 df_rev = df.copy()
-df_rev['f0_'] = df['f1_']
-df_rev['f1_'] = df['f0_']
-
-# Combine original and reversed, then group to handle duplicates
-# This ensures A->B and B->A exist and have the same values
+df_rev['Country1'] = df['Country2']
+df_rev['Country2'] = df['Country1']
 df = pd.concat([df, df_rev], ignore_index=True)
-df = df.groupby(['f0_', 'f1_'], as_index=False).mean()
+df = df.groupby(['EventYear', 'Country1', 'Country2'], as_index=False).mean()
+
+# Get available years
+available_years = sorted(df['EventYear'].unique())
+current_year = available_years[-1]  # Default to most recent year
+current_metric = 'AvgGoldstein'  # Default metric
 
 
-# --- Visualization Function ---
-def plot_relationships(target_iso, ax):
-    """Updates the map for the given target_iso."""
+def plot_relationships(target_iso, ax, year, metric):
+    """Updates the map for the given target_iso, year, and metric."""
     ax.clear()
     ax.set_axis_off()
 
-    ax.set_title(f'Geopolitical Relations: Perspective of {target_iso}', fontsize=14)
+    metric_name = 'Goldstein Scale' if metric == 'AvgGoldstein' else 'Tone'
+    ax.set_title(f'Geopolitical Relations: {target_iso} ({year}) - {metric_name}', fontsize=14)
 
-    subset = df[df['f0_'] == target_iso].copy()
-    merged = world.merge(subset, left_on='iso_a3', right_on='f1_', how='left')
+    subset = df[(df['Country1'] == target_iso) & (df['EventYear'] == year)].copy()
+    merged = world.merge(subset, left_on='iso_a3', right_on='Country2', how='left')
 
     # 1. Base Layer
     world.plot(ax=ax, color='#d3d3d3', edgecolor='white', linewidth=0.5)
@@ -50,15 +52,23 @@ def plot_relationships(target_iso, ax):
     # 2. Data Layer
     valid_data = merged[
         (merged['EventCount'] >= MIN_EVENTS) &
-        (merged['AvgGoldstein'].notna())
+        (merged[metric].notna())
         ]
 
     if not valid_data.empty:
+        # Set color scale based on metric
+        if metric == 'AvgGoldstein':
+            vmin, vmax = -10, 10
+            cmap = 'RdYlGn'
+        else:  # AvgTone
+            vmin, vmax = -10, 10
+            cmap = 'RdYlGn'
+
         valid_data.plot(
-            column='AvgGoldstein',
+            column=metric,
             ax=ax,
-            cmap='RdYlGn',
-            vmin=-10, vmax=10,
+            cmap=cmap,
+            vmin=vmin, vmax=vmax,
             edgecolor='white', linewidth=0.5
         )
 
@@ -67,16 +77,16 @@ def plot_relationships(target_iso, ax):
     if not source_geo.empty:
         source_geo.plot(ax=ax, color='#377eb8', edgecolor='black', hatch='//')
 
-    # Set fixed bounds and aspect ratio AFTER plotting to prevent matplotlib from autoscaling
+    # This prevents matplotlib from autoscaling based on the data
     ax.set_xlim(MIN_X, MAX_X)
     ax.set_ylim(MIN_Y, MAX_Y)
-    ax.set_aspect('equal', adjustable='box')
-    ax.autoscale(False)
+    ax.set_aspect('equal')
 
 
 # --- Interaction Logic ---
 def on_click(event):
-    if event.inaxes != ax: return
+    if event.inaxes != ax:
+        return
 
     point = Point(event.xdata, event.ydata)
 
@@ -89,19 +99,78 @@ def on_click(event):
 
     if clicked_country:
         print(f"Clicked on {clicked_country}. Updating map...")
-        plot_relationships(clicked_country, ax)
+        plot_relationships(clicked_country, ax, current_year, current_metric)
+        update_colorbar()
         fig.canvas.draw_idle()
 
-# --- Main Execution ---
-fig, ax = plt.subplots(figsize=(14, 8))
-plt.subplots_adjust(left=0.02, right=0.88, top=0.95, bottom=0.05)
 
-norm = Normalize(vmin=-10, vmax=10)
-cbar = fig.colorbar(ScalarMappable(norm=norm, cmap='RdYlGn'), ax=ax, shrink=0.6)
-cbar.set_label('Avg Goldstein Scale (-10: Enemy, +10: Ally)')
+def on_year_change(val):
+    global current_year
+    current_year = int(val)
+    plot_relationships(current_iso, ax, current_year, current_metric)
+    fig.canvas.draw_idle()
 
-plot_relationships(DEFAULT_ISO, ax)
 
-fig.canvas.mpl_connect('button_press_event', on_click)
+def on_metric_change(label):
+    global current_metric
+    current_metric = 'AvgGoldstein' if label == 'Goldstein' else 'AvgTone'
+    plot_relationships(current_iso, ax, current_year, current_metric)
+    update_colorbar()
+    fig.canvas.draw_idle()
 
-plt.show()
+
+def update_colorbar():
+    """Update colorbar based on current metric."""
+    cbar.ax.clear()
+
+    if current_metric == 'AvgGoldstein':
+        norm = Normalize(vmin=-10, vmax=10)
+        label = 'Avg Goldstein Scale'
+    else:
+        norm = Normalize(vmin=-10, vmax=10)
+        label = 'Avg Tone'
+
+    sm = ScalarMappable(norm=norm, cmap='RdYlGn')
+    fig.colorbar(sm, cax=cbar.ax)
+    cbar.ax.set_ylabel(label)
+
+
+if __name__ == '__main__':
+    current_iso = DEFAULT_ISO
+
+    # Create figure with extra space for controls
+    fig = plt.figure(figsize=(18, 9))
+
+    # Main map axis
+    ax = plt.axes([0.05, 0.05, 0.8, 0.9])
+
+    # Colorbar
+    cbar_ax = plt.axes([0.9, 0.05, 0.02, 0.9])
+    norm = Normalize(vmin=-10, vmax=10)
+    cbar = fig.colorbar(ScalarMappable(norm=norm, cmap='RdYlGn'), cax=cbar_ax)
+    cbar.set_label('Avg Goldstein Scale')
+
+    # Year slider
+    slider_ax = plt.axes([0.3, 0.05, 0.3, 0.03])
+    year_slider = Slider(
+        slider_ax,
+        'Year',
+        available_years[0],
+        available_years[-1],
+        valinit=current_year,
+        valstep=1
+    )
+    year_slider.on_changed(on_year_change)
+
+    # Metric radio buttons
+    radio_ax = plt.axes([0.65, 0.035, 0.1, 0.06])
+    radio = RadioButtons(radio_ax, ('Goldstein', 'Tone'))
+    radio.on_clicked(on_metric_change)
+
+    # Initial plot
+    plot_relationships(current_iso, ax, current_year, current_metric)
+
+    # Connect click event
+    fig.canvas.mpl_connect('button_press_event', on_click)
+
+    plt.show()
