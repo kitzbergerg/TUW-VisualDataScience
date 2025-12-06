@@ -31,12 +31,13 @@ df = df.groupby(['EventYear', 'Country1', 'Country2'], as_index=False).mean()
 
 # Get available years
 available_years = sorted(df['EventYear'].unique())
-current_year = available_years[-1]  # Default to most recent year
+current_year = available_years[-1] # Default to most recent year
 current_metric = 'AvgGoldstein'  # Default metric
+current_iso = DEFAULT_ISO
 
 
 def plot_relationships(target_iso, ax, year, metric):
-    """Updates the map for the given target_iso, year, and metric."""
+    """Updates the map for the given target_iso, year range, and metric."""
     ax.clear()
     ax.set_axis_off()
 
@@ -85,6 +86,8 @@ def plot_relationships(target_iso, ax, year, metric):
 
 # --- Interaction Logic ---
 def on_click(event):
+    global current_iso
+
     if event.inaxes != ax:
         return
 
@@ -99,8 +102,8 @@ def on_click(event):
 
     if clicked_country:
         print(f"Clicked on {clicked_country}. Updating map...")
-        plot_relationships(clicked_country, ax, current_year, current_metric)
-        update_colorbar()
+        current_iso = clicked_country
+        plot_relationships(current_iso, ax, current_year, current_metric)
         fig.canvas.draw_idle()
 
 
@@ -136,8 +139,6 @@ def update_colorbar():
 
 
 if __name__ == '__main__':
-    current_iso = DEFAULT_ISO
-
     # Create figure with extra space for controls
     fig = plt.figure(figsize=(18, 9))
 
@@ -150,11 +151,11 @@ if __name__ == '__main__':
     cbar = fig.colorbar(ScalarMappable(norm=norm, cmap='RdYlGn'), cax=cbar_ax)
     cbar.set_label('Avg Goldstein Scale')
 
-    # Year slider
+    # Year range slider - positioned to avoid map overlap
     slider_ax = plt.axes([0.3, 0.05, 0.3, 0.03])
     year_slider = Slider(
         slider_ax,
-        'Year',
+        'Year Range',
         available_years[0],
         available_years[-1],
         valinit=current_year,
@@ -162,8 +163,9 @@ if __name__ == '__main__':
     )
     year_slider.on_changed(on_year_change)
 
-    # Metric radio buttons
+    # Metric radio buttons - positioned to avoid slider
     radio_ax = plt.axes([0.65, 0.035, 0.1, 0.06])
+    radio_ax.set_title('Metric', fontsize=10)
     radio = RadioButtons(radio_ax, ('Goldstein', 'Tone'))
     radio.on_clicked(on_metric_change)
 
