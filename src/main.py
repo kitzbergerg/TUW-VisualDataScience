@@ -10,11 +10,13 @@ from shapely.geometry import Point
 DATA_FILE = 'data/relations_2010_to_2025.csv'
 DEFAULT_ISO = 'UKR'
 MIN_EVENTS = 50
+SHAPE_FILE = 'data/natural_earth_110m/ne_110m_admin_0_countries.shp'
 
 # --- Load Data ---
-world = gpd.read_file('data/natural_earth_110m/ne_110m_admin_0_countries.shp', encoding='utf-8').to_crs('EPSG:4326')
-world.columns = world.columns.str.lower().str.replace(' ', '_')
-world = world[(world.pop_est > 0) & (world.name != "Antarctica")]
+world = gpd.read_file(SHAPE_FILE, encoding='utf-8')
+world = world[['ADM0_A3', 'geometry', 'NAME']] # Keep only necessary columns
+world.columns = ['iso_code', 'geometry', 'country_name']
+world = world[world['iso_code'] != 'ATA'] # Exclude Antarctica
 
 # Calculate global map bounds once to prevent camera jumping
 MIN_X, MIN_Y, MAX_X, MAX_Y = world.total_bounds
@@ -45,7 +47,7 @@ def plot_relationships(target_iso, ax, year, metric):
     ax.set_title(f'Geopolitical Relations: {target_iso} ({year}) - {metric_name}', fontsize=14)
 
     subset = df[(df['Country1'] == target_iso) & (df['EventYear'] == year)].copy()
-    merged = world.merge(subset, left_on='iso_a3', right_on='Country2', how='left')
+    merged = world.merge(subset, left_on='iso_code', right_on='Country2', how='left')
 
     # 1. Base Layer
     world.plot(ax=ax, color='#d3d3d3', edgecolor='white', linewidth=0.5)
@@ -60,10 +62,10 @@ def plot_relationships(target_iso, ax, year, metric):
         # Set color scale based on metric
         if metric == 'AvgGoldstein':
             vmin, vmax = -10, 10
-            cmap = 'RdYlGn'
+            cmap = 'RdYlBu'
         else:  # AvgTone
             vmin, vmax = -10, 10
-            cmap = 'RdYlGn'
+            cmap = 'RdYlBu'
 
         valid_data.plot(
             column=metric,
@@ -74,7 +76,7 @@ def plot_relationships(target_iso, ax, year, metric):
         )
 
     # Highlight source
-    source_geo = world[world['iso_a3'] == target_iso]
+    source_geo = world[world['iso_code'] == target_iso]
     if not source_geo.empty:
         source_geo.plot(ax=ax, color='#377eb8', edgecolor='black', hatch='//')
 
@@ -97,7 +99,7 @@ def on_click(event):
     clicked_country = None
     for _, row in world.iterrows():
         if row['geometry'].contains(point):
-            clicked_country = row['iso_a3']
+            clicked_country = row['iso_code']
             break
 
     if clicked_country:
@@ -133,7 +135,7 @@ def update_colorbar():
         norm = Normalize(vmin=-10, vmax=10)
         label = 'Avg Tone'
 
-    sm = ScalarMappable(norm=norm, cmap='RdYlGn')
+    sm = ScalarMappable(norm=norm, cmap='RdYlBu')
     fig.colorbar(sm, cax=cbar.ax)
     cbar.ax.set_ylabel(label)
 
@@ -148,7 +150,7 @@ if __name__ == '__main__':
     # Colorbar
     cbar_ax = plt.axes([0.9, 0.05, 0.02, 0.9])
     norm = Normalize(vmin=-10, vmax=10)
-    cbar = fig.colorbar(ScalarMappable(norm=norm, cmap='RdYlGn'), cax=cbar_ax)
+    cbar = fig.colorbar(ScalarMappable(norm=norm, cmap='RdYlBu'), cax=cbar_ax)
     cbar.set_label('Avg Goldstein Scale')
 
     # Year range slider - positioned to avoid map overlap
