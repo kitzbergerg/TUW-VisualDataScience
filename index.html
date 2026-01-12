@@ -103,10 +103,28 @@
         }
 
         /* Specific Areas */
-        .area-map { grid-column: 1 / 2; grid-row: 1; min-height: 500px; }
-        .area-ranking { grid-column: 2 / 3; grid-row: 1; }
-        .area-scatter { grid-column: 1 / 2; grid-row: 2; height: 350px; }
-        .area-timeline { grid-column: 2 / 3; grid-row: 2; height: 350px; }
+        .area-map {
+            grid-column: 1 / 2;
+            grid-row: 1;
+            min-height: 500px;
+        }
+
+        .area-ranking {
+            grid-column: 2 / 3;
+            grid-row: 1;
+        }
+
+        .area-scatter {
+            grid-column: 1 / 2;
+            grid-row: 2;
+            height: 350px;
+        }
+
+        .area-timeline {
+            grid-column: 2 / 3;
+            grid-row: 2;
+            height: 350px;
+        }
 
         h2 {
             font-size: 1rem;
@@ -134,9 +152,10 @@
             background: rgba(255, 255, 255, 0.9);
             padding: 10px;
             border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             backdrop-filter: blur(4px);
         }
+
         .legend-bar {
             width: 160px;
             height: 12px;
@@ -145,6 +164,7 @@
             background: linear-gradient(to right, #a50026, #d73027, #f46d43, #fdae61, #fee090, #e0f3f8, #abd9e9, #74add1, #4575b4, #313695);
             margin: 5px 0;
         }
+
         .legend-labels {
             display: flex;
             justify-content: space-between;
@@ -164,15 +184,18 @@
             opacity: 0;
             transition: opacity 0.15s;
             z-index: 1000;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
             line-height: 1.4;
         }
 
         /* Loading Overlay */
         #loading {
             position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(255,255,255,0.9);
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.9);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -186,11 +209,15 @@
             .viz-grid {
                 grid-template-columns: 1fr; /* Stack everything on tablet/mobile */
             }
+
             .area-map, .area-ranking, .area-scatter, .area-timeline {
                 grid-column: auto;
                 grid-row: auto;
             }
-            .area-map { height: 400px; }
+
+            .area-map {
+                height: 400px;
+            }
         }
     </style>
 </head>
@@ -284,7 +311,7 @@
                     neutral: '#fee090',
                     selectedStroke: '#1e293b'
                 },
-                margins: { top: 20, right: 20, bottom: 40, left: 50 },
+                margins: {top: 20, right: 20, bottom: 40, left: 50},
                 transition: 400 // ms
             };
 
@@ -299,7 +326,7 @@
                 // Parallel data loading
                 const [geoData, csvData] = await Promise.all([
                     d3.json('https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson'),
-                    d3.csv('/data/relations_2010_to_2025_sym.csv', d => ({
+                    d3.csv('https://raw.githubusercontent.com/kitzbergerg/TUW-VisualDataScience/refs/heads/main/data/relations_2010_to_2025_sym.csv', d => ({
                         EventYear: +d.EventYear,
                         Country1: d.Country1,
                         Country2: d.Country2,
@@ -395,7 +422,7 @@
             const container = d3.select('#map');
             container.selectAll('*').remove();
 
-            const { width, height } = container.node().getBoundingClientRect();
+            const {width, height} = container.node().getBoundingClientRect();
 
             const svg = container.append('svg')
                 .attr('width', width)
@@ -453,8 +480,8 @@
 
             if (data.length === 0) return this.showNoData(container);
 
-            const { width, height } = container.node().getBoundingClientRect();
-            const margin = { top: 30, right: 30, bottom: 20, left: 50 };
+            const {width, height} = container.node().getBoundingClientRect();
+            const margin = {top: 30, right: 30, bottom: 20, left: 50};
             const chartWidth = width - margin.left - margin.right;
             const chartHeight = height - margin.top - margin.bottom;
 
@@ -531,7 +558,7 @@
 
             if (data.length === 0) return this.showNoData(container);
 
-            const { width, height } = container.node().getBoundingClientRect();
+            const {width, height} = container.node().getBoundingClientRect();
             const margin = this.config.margins;
             const innerW = width - margin.left - margin.right;
             const innerH = height - margin.top - margin.bottom;
@@ -592,7 +619,7 @@
             const container = d3.select('#timeline');
             container.selectAll('*').remove();
 
-            const { width, height } = container.node().getBoundingClientRect();
+            const {width, height} = container.node().getBoundingClientRect();
             const margin = this.config.margins;
             const innerW = width - margin.left - margin.right;
             const innerH = height - margin.top - margin.bottom;
@@ -615,7 +642,7 @@
                 d => d.EventYear
             );
 
-            const lineData = Array.from(rolled, ([year, val]) => ({ year, val }))
+            const lineData = Array.from(rolled, ([year, val]) => ({year, val}))
                 .sort((a, b) => a.year - b.year);
 
             if (lineData.length === 0) return this.showNoData(container);
