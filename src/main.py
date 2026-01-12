@@ -30,6 +30,7 @@ df_rev['Country1'] = df['Country2']
 df_rev['Country2'] = df['Country1']
 df = pd.concat([df, df_rev], ignore_index=True)
 df = df.groupby(['EventYear', 'Country1', 'Country2'], as_index=False).mean()
+df.to_csv('data/relations_2010_to_2025_sym.csv', index=False)
 
 # Get available years
 available_years = sorted(df['EventYear'].unique())

@@ -1,2 +1,4 @@
-/data/
 .idea
+
+/data/*
+!/data/relations_2010_to_2025_sym.csv
