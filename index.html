@@ -296,7 +296,8 @@
                 currentYear: 2025,
                 currentMetric: 'AvgGoldstein',
                 currentCountry: 'UKR',
-                minEvents: 1000
+                minEvents: 1000,
+                brushRange: null
             };
 
             this.data = [];
@@ -354,6 +355,7 @@
             // Slider
             d3.select('#yearSlider').on('input', (e) => {
                 this.state.currentYear = +e.target.value;
+                this.state.brushRange = null;
                 d3.select('#yearLabel').text(this.state.currentYear);
                 this.update();
             });
@@ -401,23 +403,57 @@
 
         // --- Core Filter Logic ---
         getFilteredData() {
-            return this.data.filter(d =>
-                d.EventYear === this.state.currentYear &&
+            // 1. Base filter (Country + Min Events)
+            let baseData = this.data.filter(d =>
                 d.Country1 === this.state.currentCountry &&
                 d.EventCount >= this.state.minEvents
             );
+
+            // 2. Year Filter
+            // If Brushing: Return ALL data in that range
+            if (this.state.brushRange) {
+                const [start, end] = this.state.brushRange;
+                return baseData.filter(d => d.EventYear >= start && d.EventYear <= end);
+            }
+            // If NOT Brushing: Return only current single year
+            else {
+                return baseData.filter(d => d.EventYear === this.state.currentYear);
+            }
+        }
+
+        processDataForViews(rawData) {
+            if (!this.state.brushRange) return rawData; // Single year data is already unique
+
+            // Aggregate multiple years into one average per country
+            return Array.from(d3.rollup(rawData,
+                v => ({
+                    Country2: v[0].Country2,
+                    [this.state.currentMetric]: d3.mean(v, d => d[this.state.currentMetric]),
+                    EventCount: d3.sum(v, d => d.EventCount),
+                    AvgTone: d3.mean(v, d => d.AvgTone)
+                }),
+                d => d.Country2
+            ).values());
         }
 
         update() {
-            const currentData = this.getFilteredData();
+            const rawData = this.getFilteredData();
+            const viewData = this.processDataForViews(rawData);
 
-            const maxAbs = d3.max(currentData, d => Math.abs(d[this.state.currentMetric])) || 0;
+            // Calculate limit based on View Data (aggregated)
+            const maxAbs = d3.max(viewData, d => Math.abs(d[this.state.currentMetric])) || 0;
             this.limit = maxAbs === 0 ? 10 : maxAbs;
             this.colorScale.domain([-this.limit, this.limit]);
 
-            this.drawMap(currentData);
-            this.drawRanking(currentData); // New Viz
-            this.drawScatter(currentData);
+            this.drawMap(viewData);
+            this.drawRanking(viewData);
+
+            // Scatter can show raw dots (trend) or aggregated.
+            // Showing raw dots for the brushed range is usually more informative.
+            this.drawScatter(rawData);
+
+            // Timeline manages its own data (history), so we just redraw it
+            // to keep the brush visual active
             this.drawTimeline();
         }
 
@@ -622,6 +658,8 @@
 
         drawTimeline() {
             const container = d3.select('#timeline');
+            // Don't clear *everything* if we are just brushing,
+            // but for simplicity in this structure, we redraw.
             container.selectAll('*').remove();
 
             const {width, height} = container.node().getBoundingClientRect();
@@ -635,13 +673,12 @@
                 .append('g')
                 .attr('transform', `translate(${margin.left},${margin.top})`);
 
-            // Aggregate data over all years for selected country
+            // Get full history for context
             const historyData = this.data.filter(d =>
                 d.Country1 === this.state.currentCountry &&
                 d.EventCount >= this.state.minEvents
             );
 
-            // Group by year and get mean
             const rolled = d3.rollup(historyData,
                 v => d3.mean(v, d => d[this.state.currentMetric]),
                 d => d.EventYear
@@ -652,78 +689,80 @@
 
             if (lineData.length === 0) return this.showNoData(container);
 
-            // Scales
             const x = d3.scaleLinear()
                 .domain(d3.extent(lineData, d => d.year))
                 .range([0, innerW]);
 
             const y = d3.scaleLinear()
-                .domain([-this.limit, this.limit])
+                .domain([-10, 10]) // Keep fixed Y for consistency
                 .range([innerH, 0]);
 
-            // Axes
-            svg.append('g')
-                .attr('transform', `translate(0,${innerH})`)
-                .call(d3.axisBottom(x).tickFormat(d3.format('d')));
-
+            // Draw Line & Axes (Standard D3 code...)
+            svg.append('g').attr('transform', `translate(0,${innerH})`).call(d3.axisBottom(x).tickFormat(d3.format('d')));
             svg.append('g').call(d3.axisLeft(y));
 
-            // Line
-            const line = d3.line()
-                .x(d => x(d.year))
-                .y(d => y(d.val))
-                .curve(d3.curveMonotoneX);
+            const line = d3.line().x(d => x(d.year)).y(d => y(d.val));
+            svg.append('path').datum(lineData).attr('fill', 'none')
+                .attr('stroke', this.config.colors.highlight).attr('stroke-width', 2).attr('d', line);
 
-            svg.append('path')
-                .datum(lineData)
-                .attr('fill', 'none')
-                .attr('stroke', this.config.colors.highlight)
-                .attr('stroke-width', 2)
-                .attr('d', line);
+            svg.selectAll('.dot').data(lineData).join('circle')
+                .attr('cx', d => x(d.year)).attr('cy', d => y(d.val)).attr('r', 4)
+                .attr('fill', 'white').attr('stroke', this.config.colors.highlight).attr('stroke-width', 2);
 
-            // Dots
-            svg.selectAll('.dot')
-                .data(lineData)
-                .join('circle')
-                .attr('cx', d => x(d.year))
-                .attr('cy', d => y(d.val))
-                .attr('r', 4)
-                .attr('fill', 'white')
-                .attr('stroke', this.config.colors.highlight)
-                .attr('stroke-width', 2)
-                .on('mouseover', (e, d) => this.showTooltip(e, `Year: ${d.year}<br>Val: ${d.val.toFixed(2)}`))
-                .on('mouseout', () => this.hideTooltip());
+            // --- NEW: BRUSH IMPLEMENTATION ---
 
-            // Zero Line
-            svg.append('line')
-                .attr('x1', 0).attr('x2', innerW)
-                .attr('y1', y(0)).attr('y2', y(0))
-                .attr('stroke', '#ccc')
-                .attr('stroke-dasharray', '4,4');
-        }
+            const brushed = ({selection}) => {
+                if (!selection) {
+                    // If clicked outside brush, reset to null
+                    if (this.state.brushRange) {
+                        this.state.brushRange = null;
+                        this.update(); // Trigger full update
+                    }
+                    return;
+                }
 
-        // --- Helpers ---
+                // Convert pixels to Year Range
+                const [x0, x1] = selection;
+                const startYear = Math.round(x.invert(x0));
+                const endYear = Math.round(x.invert(x1));
 
-        showNoData(container) {
-            container.append('div')
-                .style('height', '100%')
-                .style('display', 'flex')
-                .style('align-items', 'center')
-                .style('justify-content', 'center')
-                .style('color', '#999')
-                .text('No data available for current selection');
-        }
+                // Only update if range changed
+                if (!this.state.brushRange || this.state.brushRange[0] !== startYear || this.state.brushRange[1] !== endYear) {
+                    this.state.brushRange = [startYear, endYear];
 
-        showTooltip(e, html) {
-            const tooltip = d3.select('#tooltip');
-            tooltip.html(html)
-                .style('opacity', 1)
-                .style('left', (e.pageX + 15) + 'px')
-                .style('top', (e.pageY - 10) + 'px');
-        }
+                    // Manually trigger updates of OTHER views (Map/Ranking/Scatter)
+                    // We do NOT call this.update() here because that would redraw the timeline
+                    // and kill the active brush being dragged.
 
-        hideTooltip() {
-            d3.select('#tooltip').style('opacity', 0);
+                    const rawData = this.getFilteredData(); // Uses new brushRange
+                    const viewData = this.processDataForViews(rawData);
+
+                    // Recalculate color domain for the brush selection
+                    const maxAbs = d3.max(viewData, d => Math.abs(d[this.state.currentMetric])) || 0;
+                    this.limit = maxAbs === 0 ? 10 : maxAbs;
+                    this.colorScale.domain([-this.limit, this.limit]);
+
+                    this.drawMap(viewData);
+                    this.drawRanking(viewData);
+                    this.drawScatter(rawData);
+                }
+            };
+
+            const brush = d3.brushX()
+                .extent([[0, 0], [innerW, innerH]])
+                .on("end", brushed); // "end" fires when user stops dragging
+
+            const gBrush = svg.append("g")
+                .attr("class", "brush")
+                .call(brush);
+
+            // If a brush exists in state (e.g., from resize redraw), restore it
+            if (this.state.brushRange) {
+                gBrush.call(brush.move, [
+                    x(this.state.brushRange[0]),
+                    x(this.state.brushRange[1])
+                ]);
+            }
         }
     }
 
