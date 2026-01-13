@@ -261,8 +261,8 @@
             <div id="map" class="chart-container"></div>
             <div class="map-legend">
                 <div class="legend-labels">
-                    <span>Negative (-10)</span>
-                    <span>Positive (+10)</span>
+                    <span>Negative</span>
+                    <span>Positive</span>
                 </div>
                 <div class="legend-bar"></div>
             </div>
@@ -316,7 +316,7 @@
             };
 
             // D3 Color Scale (Reversed: Red=Low, Blue=High)
-            this.colorScale = d3.scaleSequential(d3.interpolateRdYlBu).domain([10, -10]);
+            this.colorScale = d3.scaleSequential(d3.interpolateRdYlBu);
 
             this.bindEvents();
         }
@@ -410,6 +410,11 @@
 
         update() {
             const currentData = this.getFilteredData();
+
+            const maxAbs = d3.max(currentData, d => Math.abs(d[this.state.currentMetric])) || 0;
+            this.limit = maxAbs === 0 ? 10 : maxAbs;
+            this.colorScale.domain([-this.limit, this.limit]);
+
             this.drawMap(currentData);
             this.drawRanking(currentData); // New Viz
             this.drawScatter(currentData);
@@ -509,7 +514,7 @@
 
             // X scale needs to handle negative and positive
             const x = d3.scaleLinear()
-                .domain([-10, 10])
+                .domain([-this.limit, this.limit])
                 .range([0, chartWidth]);
 
             // Grid line at 0
@@ -571,7 +576,7 @@
 
             // Scales
             const x = d3.scaleLinear()
-                .domain([-10, 10])
+                .domain([-this.limit, this.limit])
                 .range([0, innerW]);
 
             const y = d3.scaleLinear()
@@ -653,7 +658,7 @@
                 .range([0, innerW]);
 
             const y = d3.scaleLinear()
-                .domain([-10, 10])
+                .domain([-this.limit, this.limit])
                 .range([innerH, 0]);
 
             // Axes
